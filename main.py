@@ -8,70 +8,106 @@ WIDTH, HEIGHT = 500, 500
 FPS = 60
 GRAVITY = 1
 JUMP_HEIGHT = 15
+PIPE_GAP = 200
+PIPE_WIDTH = 50
+PIPE_VELOCITY = 5
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
 
-screen = pygame.display.set_mode((WIDTH, HEIGHT))
-pygame.display.set_caption("Flappy Bird")
+class GameObject:
+    def __init__(self, x, y, width, height, color = WHITE):
+        self.rect = pygame.Rect(x, y, width, height)
+        self.color = color
 
-bird_size = 30
-bird_x = WIDTH // 4
-bird_y = HEIGHT // 2
-bird_velocity = 0
+    def draw(self, screen):
+        pygame.draw.rect(screen, self.color, self.rect)
 
-pipe_width = 50
-pipe_height = 300
-pipe_gap = 200
-pipe_velocity = 5
-pipes = []
+class Bird(GameObject):
+    def __init__(self, x, y, size, velocity):
+        super().__init__(x, y, size, size)
+        self.velocity = velocity
 
-clock = pygame.time.Clock()
+    def jump(self):
+        self.velocity = -JUMP_HEIGHT
 
-def draw_bird(x, y):
-    pygame.draw.rect(screen, WHITE, [x, y, bird_size, bird_size])
+    def update(self):
+        self.velocity += GRAVITY
+        self.rect.y += self.velocity
 
-def draw_pipe(x, height):
-    pygame.draw.rect(screen, WHITE, [x, 0, pipe_width, height])
-    pygame.draw.rect(screen, WHITE, [x, height + pipe_gap, pipe_width, HEIGHT - height - pipe_gap])
+class Pipe(GameObject):
+    def __init__(self, x, height, gap):
+        upper_height = height
+        lower_height = HEIGHT - height - gap
+        super().__init__(x, 0, PIPE_WIDTH, upper_height, color = WHITE)
+        self.lower_pipe = GameObject(x, HEIGHT - lower_height, PIPE_WIDTH, lower_height, color = WHITE)
 
-while True:
-    for event in pygame.event.get():
-        if event.type == pygame.QUIT:
-            pygame.quit()
-            sys.exit()
-        elif event.type == pygame.KEYDOWN:
-            if event.key == pygame.K_SPACE:
-                bird_velocity = -JUMP_HEIGHT
+    def move(self, velocity):
+        self.rect.x -= velocity
+        self.lower_pipe.rect.x -= velocity
 
-    bird_velocity += GRAVITY
-    bird_y += bird_velocity
+    def draw(self, screen):
+        super().draw(screen)
+        self.lower_pipe.draw(screen)
 
-    if len(pipes) == 0 or pipes[-1][0] < WIDTH - WIDTH // 2:
-        pipe_height = random.randint(50, HEIGHT - pipe_gap - 50)
-        pipes.append([WIDTH, pipe_height])
+class Game:
+    def __init__(self):
+        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        self.clock = pygame.time.Clock()
+        self.bird = Bird(WIDTH // 4, HEIGHT // 2, 30, 0)
+        self.pipes = []
 
-    for pipe in pipes:
-        pipe[0] -= pipe_velocity
+    def handle_events(self):
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                self.quit_game()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    self.bird.jump()
 
-    pipes = [pipe for pipe in pipes if pipe[0] > -pipe_width]
+    def create_pipe(self):
+        pipe_height = random.randint(HEIGHT // 6, HEIGHT - PIPE_GAP - HEIGHT // 6)
+        return Pipe(WIDTH, pipe_height, PIPE_GAP)
 
-    for pipe in pipes:
-        if (
-            bird_x < pipe[0] + pipe_width
-            and bird_x + bird_size > pipe[0]
-            and (bird_y < pipe[1] or bird_y + bird_size > pipe[1] + pipe_gap)
-        ):
-            pygame.quit()
-            sys.exit()
+    def collision_check(self):
+        for pipe in self.pipes:
+            if self.bird.rect.colliderect(pipe.rect) or self.bird.rect.colliderect(pipe.lower_pipe.rect) or self.bird.rect.y > HEIGHT:
+                self.quit_game()
 
-    screen.fill(BLACK)
+    def draw_objects(self):
+        self.screen.fill(BLACK)
 
-    for pipe in pipes:
-        draw_pipe(pipe[0], pipe[1])
+        for pipe in self.pipes:
+            pipe.draw(self.screen)
 
-    draw_bird(bird_x, bird_y)
+        self.bird.draw(self.screen)
 
-    pygame.display.flip()
+        pygame.display.flip()
 
-    clock.tick(FPS)
+    def quit_game(self):
+        pygame.quit()
+        sys.exit()
+
+    def run(self):
+        while True:
+            self.handle_events()
+
+            self.bird.update()
+
+            if not self.pipes or self.pipes[-1].rect.x < WIDTH - WIDTH // 2:
+                self.pipes.append(self.create_pipe())
+
+            for pipe in self.pipes:
+                pipe.move(PIPE_VELOCITY)
+
+            self.pipes = [pipe for pipe in self.pipes if pipe.rect.x > -PIPE_WIDTH]
+
+            self.collision_check()
+
+            self.draw_objects()
+
+            self.clock.tick(FPS)
+
+if __name__ == "__main__":
+    game = Game()
+    game.run()
